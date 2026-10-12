@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Economic Calendar</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: Verdana, Arial, sans-serif;
+    font-size: 13px;
+    background: #fff;
+    color: #2b2b2b;
+    padding: 6px;
+  }
+
+  /* ---------- top bar ---------- */
+  .bar {
+    display: flex; align-items: stretch;
+    background: #2f4a7f;
+    color: #fff;
+    height: 30px;
+    font-size: 13px;
+  }
+  .bar .nav {
+    background: #4f6aa3; width: 30px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; user-select: none; font-size: 10px;
+    border-right: 2px solid #2f4a7f;
+  }
+  .bar .nav:hover { background: #6180bd; }
+  .bar .title {
+    background: #4f6aa3; padding: 0 12px; font-weight: bold;
+    display: flex; align-items: center;
+  }
+  .bar .spacer { flex: 1; }
+  .bar .btn {
+    display: flex; align-items: center; padding: 0 12px;
+    background: #3d5a94; border-left: 2px solid #2f4a7f; cursor: default;
+  }
+  .bar .btn.green { background: #7ec96d; width: 38px; justify-content: center; }
+  .bar select {
+    background: #3d5a94; color: #fff; border: 0; font: inherit; font-size: 12px;
+    padding: 0 6px; border-left: 2px solid #2f4a7f; height: 100%;
+  }
+
+  /* ---------- table ---------- */
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  thead th {
+    background: #7385b8; color: #fff; font-weight: normal;
+    padding: 5px 4px; font-size: 13px; text-align: center; height: 26px;
+  }
+  thead th.clock { text-decoration: underline; }
+  th.c-date  { width: 9%; }
+  th.c-time  { width: 9%; }
+  th.c-cur   { width: 9%; }
+  th.c-imp   { width: 8%; }
+  th.c-event { width: auto; text-align: left; padding-left: 12px; }
+  th.c-alert { width: 6%; }
+  th.c-det   { width: 6%; }
+  th.c-num   { width: 8%; }
+  th.c-graph { width: 5%; }
+
+  tbody td {
+    text-align: center; padding: 0 4px; height: 35px;
+    border-bottom: 1px solid #e2e4e9;
+    background: #f5f7fb;
+  }
+  tbody tr.shade td { background: #e8eaee; }
+  tbody td.date {
+    font-weight: normal; color: #444; line-height: 19px;
+    border-right: 1px solid #fff; vertical-align: middle;
+  }
+  tbody td.event { text-align: left; padding-left: 12px; }
+  tbody tr.day-end td { border-bottom: 1px solid #d3d6dc; }
+  tbody tr.empty td.blank { height: 53px; }
+  tbody tr.sub td { border-top: 1px solid #fff; }
+
+  /* ---------- impact icons ---------- */
+  .imp {
+    display: inline-block; width: 17px; height: 15px; border-radius: 2px;
+    border: 1px solid rgba(0,0,0,.25);
+    vertical-align: middle;
+  }
+  .imp.high { background: #e60000; }
+  .imp.med  { background: #f08a1c; }
+  .imp.low  { background: #f5d84a; }
+  .imp.hol  { background: #c4c4c4; }
+
+  /* ---------- detail folder ---------- */
+  .folder {
+    display: inline-block; position: relative;
+    width: 20px; height: 14px;
+    background: #f9d86b; border: 1px solid #d9a93a; border-radius: 2px;
+  }
+  .folder::before {
+    content: ""; position: absolute; left: -1px; top: -4px;
+    width: 9px; height: 4px; background: #f9d86b;
+    border: 1px solid #d9a93a; border-bottom: 0; border-radius: 2px 2px 0 0;
+  }
+
+  .bell {
+    display: inline-block; width: 12px; height: 12px; border-radius: 6px 6px 1px 1px;
+    background: #d4d6da;
+  }
+  .graph {
+    display: inline-flex; align-items: flex-end; gap: 1px; height: 14px;
+  }
+  .graph i { display: block; width: 4px; }
+  .graph i:nth-child(1) { height: 10px; background: #e04a4a; }
+  .graph i:nth-child(2) { height: 14px; background: #4a7fd6; }
+  .graph i:nth-child(3) { height: 7px;  background: #5aa95a; }
+
+  .up-next td.now-mark::before {
+    content: ""; display: inline-block; margin-right: 4px;
+    border-left: 7px solid #3aa83a; border-top: 5px solid transparent; border-bottom: 5px solid transparent;
+  }
+
+  .actual.better { color: #1a8a1a; font-weight: bold; }
+  .actual.worse  { color: #cc0000; font-weight: bold; }
+
+  .note {
+    margin-top: 6px; font-size: 11px; color: #777; padding: 4px 2px;
+  }
+  .note b { color: #c0392b; }
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <div class="nav" id="prev" title="Previous week">&#9664;</div>
+  <div class="title" id="week-title">This Week</div>
+  <div class="nav" id="next" title="Next week" style="border-left:2px solid #2f4a7f;border-right:0">&#9654;</div>
+  <div class="spacer"></div>
+  <select id="tz" title="Time zone">
+    <option value="America/New_York" selected>New York (ET)</option>
+    <option value="Europe/Amsterdam">Amsterdam (CET)</option>
+    <option value="UTC">UTC</option>
+  </select>
+  <div class="btn">US events &bull; High, Medium &amp; Holidays</div>
+  <div class="btn green">&#9660;</div>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th class="c-date">Date</th>
+      <th class="c-time clock" id="clock">--:--</th>
+      <th class="c-cur">Currency</th>
+      <th class="c-imp">Impact</th>
+      <th class="c-event"></th>
+      <th class="c-alert">Alerts</th>
+      <th class="c-det">Detail</th>
+      <th class="c-num">Actual</th>
+      <th class="c-num">Forecast</th>
+      <th class="c-num">Previous</th>
+      <th class="c-graph">Graph</th>
+    </tr>
+  </thead>
+  <tbody id="body">
+    <tr><td colspan="11" style="height:60px">Loading calendar…</td></tr>
+  </tbody>
+</table>
+<div class="note" id="note"></div>
+
+<script>
+/* ============================================================
+   CONFIG
+   ============================================================ */
+const FEEDS = {
+  0: 'https://nfs.faireconomy.media/ff_calendar_thisweek.json',
+  1: 'https://nfs.faireconomy.media/ff_calendar_nextweek.json'
+};
+// Public CORS proxies, tried in order if the direct request is blocked
+const PROXIES = [
+  u => u,
+  u => 'https://corsproxy.io/?' + encodeURIComponent(u),
+  u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u)
+];
+const COUNTRY = 'USD';
+const SHOW_IMPACT = ['High', 'Medium', 'Holiday'];
+
+let tz = localStorage.getItem('ff-tz') || 'America/New_York';
+let weekOffset = 0;               // 0 = this week, 1 = next week
+let cache = {};
+
+/* Offline fallback (the week from your screenshot) so the page always renders */
+const SAMPLE = [
+  { title:'Bank Holiday', country:'USD', date:'2026-10-12T00:00:00-04:00', impact:'Holiday', forecast:'', previous:'' },
+  { title:'Core CPI m/m', country:'USD', date:'2026-10-14T08:30:00-04:00', impact:'High', forecast:'0.2%', previous:'0.3%' },
+  { title:'Core CPI y/y', country:'USD', date:'2026-10-14T08:30:00-04:00', impact:'High', forecast:'2.5%', previous:'2.4%' },
+  { title:'CPI m/m', country:'USD', date:'2026-10-14T08:30:00-04:00', impact:'High', forecast:'0.6%', previous:'0.4%' },
+  { title:'CPI y/y', country:'USD', date:'2026-10-14T08:30:00-04:00', impact:'High', forecast:'3.6%', previous:'3.4%' },
+  { title:'Core PPI m/m', country:'USD', date:'2026-10-15T08:30:00-04:00', impact:'High', forecast:'0.3%', previous:'0.2%' },
+  { title:'Core Retail Sales m/m', country:'USD', date:'2026-10-15T08:30:00-04:00', impact:'High', forecast:'0.5%', previous:'1.4%' },
+  { title:'PPI m/m', country:'USD', date:'2026-10-15T08:30:00-04:00', impact:'High', forecast:'0.5%', previous:'0.4%' },
+  { title:'Retail Sales m/m', country:'USD', date:'2026-10-15T08:30:00-04:00', impact:'High', forecast:'0.3%', previous:'1.2%' },
+  { title:'Philly Fed Manufacturing Index', country:'USD', date:'2026-10-15T08:30:00-04:00', impact:'Medium', forecast:'26.5', previous:'37.8' },
+  { title:'Unemployment Claims', country:'USD', date:'2026-10-15T08:30:00-04:00', impact:'Medium', forecast:'195K', previous:'197K' },
+  { title:'Fed Chairman Warsh Speaks', country:'USD', date:'2026-10-15T23:30:00-04:00', impact:'High', forecast:'', previous:'' }
+];
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
+const fmt = (d, opts) => new Intl.DateTimeFormat('en-US', { timeZone: tz, ...opts }).format(d);
+
+function ymd(d) {            // yyyy-mm-dd in the selected time zone
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat('en-CA', { timeZone: tz, year:'numeric', month:'2-digit', day:'2-digit' })
+      .formatToParts(d).map(x => [x.type, x.value]));
+  return `${p.year}-${p.month}-${p.day}`;
+}
+
+function weekStart(offset) { // Sunday of the wanted week, as a UTC-midnight Date
+  const [y, m, d] = ymd(new Date()).split('-').map(Number);
+  const today = new Date(Date.UTC(y, m - 1, d));
+  today.setUTCDate(today.getUTCDate() - today.getUTCDay() + offset * 7);
+  return today;
+}
+
+function timeLabel(d) {
+  return fmt(d, { hour:'numeric', minute:'2-digit', hour12:true }).replace(' ', '').toLowerCase();
+}
+
+function esc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function impactClass(i) {
+  return { High:'high', Medium:'med', Low:'low', Holiday:'hol' }[i] || 'low';
+}
+
+/* ============================================================
+   DATA
+   ============================================================ */
+async function fetchFeed(url) {
+  let lastErr;
+  for (const wrap of PROXIES) {
+    try {
+      const res = await fetch(wrap(url), { cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      if (Array.isArray(data)) return data;
+      throw new Error('Unexpected response');
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr;
+}
+
+async function getEvents(offset) {
+  if (cache[offset]) return cache[offset];
+  try {
+    const data = await fetchFeed(FEEDS[offset]);
+    cache[offset] = { events: data, live: true };
+  } catch (e) {
+    cache[offset] = { events: offset === 0 ? SAMPLE : [], live: false };
+  }
+  return cache[offset];
+}
+
+/* ============================================================
+   RENDER
+   ============================================================ */
+async function render() {
+  const body = document.getElementById('body');
+  const { events, live } = await getEvents(weekOffset);
+
+  const start = weekStart(weekOffset);
+  const end = new Date(start); end.setUTCDate(end.getUTCDate() + 6);
+  const f = d => d.toLocaleDateString('en-US', { timeZone:'UTC', month:'short', day:'numeric' });
+  document.getElementById('week-title').textContent =
+    (weekOffset === 0 ? 'This Week: ' : 'Next Week: ') + f(start) + ' - ' + f(end);
+
+  const wanted = events
+    .filter(e => e.country === COUNTRY && SHOW_IMPACT.includes(e.impact))
+    .map(e => ({ ...e, d: new Date(e.date) }))
+    .sort((a, b) => a.d - b.d);
+
+  // group by day
+  const byDay = {};
+  wanted.forEach(e => (byDay[ymd(e.d)] ||= []).push(e));
+
+  const now = new Date();
+  const nextEvent = wanted.find(e => e.impact !== 'Holiday' && e.d > now);
+  let html = '';
+  let shade = false;
+
+  for (let i = 0; i < 7; i++) {
+    const day = new Date(start); day.setUTCDate(day.getUTCDate() + i);
+    const key = day.toISOString().slice(0, 10);
+    const evs = byDay[key] || [];
+    const dateCell = d => `<td class="date" rowspan="${d}">${day.toLocaleDateString('en-US',{timeZone:'UTC',weekday:'short'})}<br>${day.toLocaleDateString('en-US',{timeZone:'UTC',month:'short',day:'numeric'})}</td>`;
+    const cls = shade ? 'shade' : '';
+
+    if (!evs.length) {
+      html += `<tr class="${cls} empty day-end">${dateCell(1)}<td class="blank" colspan="10"></td></tr>`;
+    } else {
+      let lastTime = '';
+      evs.forEach((e, idx) => {
+        const isHol = e.impact === 'Holiday';
+        const t = isHol ? 'All Day' : timeLabel(e.d);
+        const showTime = t !== lastTime;
+        lastTime = t;
+        const isNext = e === nextEvent;
+        const last = idx === evs.length - 1;
+        html += `<tr class="${cls} ${last ? 'day-end' : ''} ${showTime && idx ? 'sub' : ''} ${isNext ? 'up-next' : ''}">
+          ${idx === 0 ? dateCell(evs.length) : ''}
+          <td class="${isNext && showTime ? 'now-mark' : ''}">${showTime ? t : ''}</td>
+          <td>${COUNTRY}</td>
+          <td><span class="imp ${impactClass(e.impact)}"></span></td>
+          <td class="event">${esc(e.title)}</td>
+          <td>${isHol ? '' : '<span class="bell"></span>'}</td>
+          <td><span class="folder"></span></td>
+          <td class="actual">${esc(e.actual)}</td>
+          <td>${esc(e.forecast)}</td>
+          <td>${esc(e.previous)}</td>
+          <td>${isHol ? '' : '<span class="graph"><i></i><i></i><i></i></span>'}</td>
+        </tr>`;
+      });
+    }
+    shade = !shade;
+  }
+  body.innerHTML = html;
+
+  document.getElementById('note').innerHTML = live ? ''
+    : '<b>Live feed unavailable</b> (blocked or rate limited) &mdash; showing sample data. Refresh in a minute, or run this page from your own server.';
+}
+
+/* ============================================================
+   CONTROLS
+   ============================================================ */
+function tickClock() {
+  document.getElementById('clock').textContent = timeLabel(new Date());
+}
+setInterval(tickClock, 1000); tickClock();
+
+document.getElementById('prev').onclick = () => { weekOffset = 0; render(); };
+document.getElementById('next').onclick = () => { weekOffset = 1; render(); };
+const sel = document.getElementById('tz');
+sel.value = tz;
+sel.onchange = () => { tz = sel.value; localStorage.setItem('ff-tz', tz); tickClock(); render(); };
+
+render();
+</script>
+</body>
+</html>
