@@ -119,6 +119,19 @@
   .actual.better { color: #1a8a1a; font-weight: bold; }
   .actual.worse  { color: #cc0000; font-weight: bold; }
 
+  .bar .nav.off { opacity: .35; cursor: default; pointer-events: none; }
+  .bar .btn.green { cursor: pointer; }
+  .bar .btn.green.open { background: #5fb04e; }
+
+  .panel {
+    display: none; background: #eef0f6; border: 1px solid #c9cedd; border-top: 0;
+    padding: 10px 12px; font-size: 12px;
+  }
+  .panel.open { display: flex; flex-wrap: wrap; gap: 8px 28px; }
+  .panel h4 { font-size: 11px; color: #4f6aa3; margin-bottom: 5px; }
+  .panel label { display: inline-flex; align-items: center; gap: 5px; margin-right: 12px; cursor: pointer; }
+  .panel input { cursor: pointer; }
+
   .note {
     margin-top: 6px; font-size: 11px; color: #777; padding: 4px 2px;
   }
@@ -137,8 +150,22 @@
     <option value="Europe/Amsterdam">Amsterdam (CET)</option>
     <option value="UTC">UTC</option>
   </select>
-  <div class="btn">US events &bull; High, Medium &amp; Holidays</div>
-  <div class="btn green">&#9660;</div>
+  <div class="btn" id="summary"></div>
+  <div class="btn green" id="filter-btn" title="Filters">&#9660;</div>
+</div>
+
+<div class="panel" id="panel">
+  <div>
+    <h4>Impact</h4>
+    <label><input type="checkbox" data-imp="High"><span class="imp high"></span> High</label>
+    <label><input type="checkbox" data-imp="Medium"><span class="imp med"></span> Medium</label>
+    <label><input type="checkbox" data-imp="Low"><span class="imp low"></span> Low</label>
+    <label><input type="checkbox" data-imp="Holiday"><span class="imp hol"></span> Holiday</label>
+  </div>
+  <div>
+    <h4>Currency</h4>
+    <span id="cur-list"></span>
+  </div>
 </div>
 
 <table>
@@ -177,10 +204,13 @@ const PROXIES = [
   u => 'https://corsproxy.io/?' + encodeURIComponent(u),
   u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u)
 ];
-const COUNTRY = 'USD';
-const SHOW_IMPACT = ['High', 'Medium', 'Holiday'];
+const ALL_CUR = ['USD','EUR','GBP','JPY','CAD','AUD','NZD','CHF','CNY'];
+const saved = (() => { try { return JSON.parse(localStorage.getItem('ff-filters')) || {}; } catch (e) { return {}; } })();
+let showImpact = saved.impact || ['High', 'Medium', 'Holiday'];
+let showCur = saved.cur || ['USD'];
+const saveFilters = () => { try { localStorage.setItem('ff-filters', JSON.stringify({ impact: showImpact, cur: showCur })); } catch (e) {} };
 
-let tz = localStorage.getItem('ff-tz') || 'America/New_York';
+let tz = (() => { try { return localStorage.getItem('ff-tz'); } catch (e) { return null; } })() || 'America/New_York';
 let weekOffset = 0;               // 0 = this week, 1 = next week
 let cache = {};
 
@@ -271,7 +301,7 @@ async function render() {
     (weekOffset === 0 ? 'This Week: ' : 'Next Week: ') + f(start) + ' - ' + f(end);
 
   const wanted = events
-    .filter(e => e.country === COUNTRY && SHOW_IMPACT.includes(e.impact))
+    .filter(e => showCur.includes(e.country) && showImpact.includes(e.impact))
     .map(e => ({ ...e, d: new Date(e.date) }))
     .sort((a, b) => a.d - b.d);
 
@@ -305,7 +335,7 @@ async function render() {
         html += `<tr class="${cls} ${last ? 'day-end' : ''} ${showTime && idx ? 'sub' : ''} ${isNext ? 'up-next' : ''}">
           ${idx === 0 ? dateCell(evs.length) : ''}
           <td class="${isNext && showTime ? 'now-mark' : ''}">${showTime ? t : ''}</td>
-          <td>${COUNTRY}</td>
+          <td>${esc(e.country)}</td>
           <td><span class="imp ${impactClass(e.impact)}"></span></td>
           <td class="event">${esc(e.title)}</td>
           <td>${isHol ? '' : '<span class="bell"></span>'}</td>
@@ -321,8 +351,15 @@ async function render() {
   }
   body.innerHTML = html;
 
+  document.getElementById('prev').classList.toggle('off', weekOffset === 0);
+  document.getElementById('next').classList.toggle('off', weekOffset === 1);
+  document.getElementById('summary').textContent =
+    (showCur.join(', ') || 'No currency') + ' \u2022 ' + (showImpact.join(', ') || 'No impact');
+
   document.getElementById('note').innerHTML = live ? ''
-    : '<b>Live feed unavailable</b> (blocked or rate limited) &mdash; showing sample data. Refresh in a minute, or run this page from your own server.';
+    : (weekOffset === 1
+        ? '<b>Next week isn\'t published yet.</b> Forex Factory usually releases it late in the week.'
+        : '<b>Live feed unavailable</b> (blocked or rate limited) &mdash; showing sample data. Refresh in a minute, or run this page from your own server.');
 }
 
 /* ============================================================
@@ -333,11 +370,26 @@ function tickClock() {
 }
 setInterval(tickClock, 1000); tickClock();
 
-document.getElementById('prev').onclick = () => { weekOffset = 0; render(); };
-document.getElementById('next').onclick = () => { weekOffset = 1; render(); };
+document.getElementById('prev').onclick = () => { if (weekOffset > 0) { weekOffset--; render(); } };
+document.getElementById('next').onclick = () => { if (weekOffset < 1) { weekOffset++; render(); } };
+
+// filter panel
+const panel = document.getElementById('panel');
+const fbtn = document.getElementById('filter-btn');
+fbtn.onclick = () => { panel.classList.toggle('open'); fbtn.classList.toggle('open'); };
+
+document.getElementById('cur-list').innerHTML = ALL_CUR
+  .map(c => `<label><input type="checkbox" data-cur="${c}"> ${c}</label>`).join('');
+panel.querySelectorAll('[data-imp]').forEach(cb => cb.checked = showImpact.includes(cb.dataset.imp));
+panel.querySelectorAll('[data-cur]').forEach(cb => cb.checked = showCur.includes(cb.dataset.cur));
+panel.addEventListener('change', () => {
+  showImpact = [...panel.querySelectorAll('[data-imp]:checked')].map(x => x.dataset.imp);
+  showCur = [...panel.querySelectorAll('[data-cur]:checked')].map(x => x.dataset.cur);
+  saveFilters(); render();
+});
 const sel = document.getElementById('tz');
 sel.value = tz;
-sel.onchange = () => { tz = sel.value; localStorage.setItem('ff-tz', tz); tickClock(); render(); };
+sel.onchange = () => { tz = sel.value; try { localStorage.setItem('ff-tz', tz); } catch (e) {} tickClock(); render(); };
 
 render();
 </script>
